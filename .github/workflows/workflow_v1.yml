@@ -19,7 +19,12 @@ jobs:
       - name: Use the list of values input
         run: |
           list_of_values="${{ inputs.list_of_values }}"
-          echo "List of values provided: $list_of_values"
+          FS=',' read -ra values <<< "$list_of_values"
+          
+          # Now you have individual values in the 'values' array
+          for value in "${values[@]}"; do
+            echo "Value: $value"
+          done
 
   switch_branch_job:
     runs-on: ubuntu-latest
