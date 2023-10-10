@@ -1,12 +1,15 @@
-name: New Action Workflow
+name: My GitHub Action Workflow
 on:
   workflow_dispatch:
     inputs:
       list_of_values:
-        description: 'Enter a list of values (comma-separated)'
+        description: 'List of Tables (comma-separated)'
         required: true
-      branch_name:
-        description: 'Enter the name of the branch to switch to'
+      base_branch_name:
+        description: 'Enter the name of the base branch'
+        required: true
+      changes_branch_name:
+        description: 'Enter the name of the changes branch'
         required: true
       environment:
         type: choice
@@ -21,16 +24,11 @@ on:
         type: string
         description: "Schema"
         default: "SD"
-      table:
-        type: string
-        description: "Specific table (* for all)"
-        default: "*"
       hist_cut_off_dt:
         type: string
-        description: "History cut off date to be used as part as part of the initial load."
+        description: "History cut off date to be used as part of the initial load."
         default: '2023-02-23 23:59:59.999'
 
- 
 permissions:
   contents: read
   issues: read
@@ -43,32 +41,42 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Use the list of values input
+      - name: Use the list of tables input
+        id: list_of_values_step
         run: |
-          list_of_values="${{ inputs.list_of_values }}"
-          FS=',' read -ra values <<< "$list_of_values"
-          
-          # Now you have individual values in the 'values' array
-          for value in "${values[@]}"; do
-            echo "Value: $value"
-          done
+          list_of_tables="${{ inputs.list_of_values }}"
+          FS=',' read -ra tables <<< "$list_of_tables"
+          echo "::set-output name=tables::${tables[*]}"  # Set an output to pass tables as an artifact
 
   switch_branch_job:
     runs-on: ubuntu-latest
-    env: 
-      BRANCH_NAME : ${{ github.event.inputs.branch_name }} 
+    needs: [list_of_values_job]  # Depend on list_of_values_job to complete
+    env:
+      BASE_BRANCH_NAME: ${{ github.event.inputs.base_branch_name }}
+      CHANGES_BRANCH_NAME: ${{ github.event.inputs.changes_branch_name }}
     steps:
-    - uses: actions/checkout@v1
-      with:  
-        ref: ${{ github.event.inputs.branch_name }}
-    - name: Check
-      run: |
-          #echo -e 'Running on default: ${{ steps.branch-name.outputs.current_branch }}   
-          echo -e 'var name: ${{ github.event.inputs.branch_name }}'
-      
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Check if changes can be merged
+        run: |
+          git checkout $BASE_BRANCH_NAME
+          git pull origin $BASE_BRANCH_NAME
+          git checkout -b $CHANGES_BRANCH_NAME
+          git pull origin $CHANGES_BRANCH_NAME
+
+          # Try to merge the changes branch into the base branch
+          if git merge-base --is-ancestor $BASE_BRANCH_NAME $CHANGES_BRANCH_NAME; then
+            echo "Changes can be merged without conflicts."
+          else
+            echo "Changes cannot be merged without conflicts."
+            exit 1
+          fi
+
   HistoryLoad:
-    runs-on: [ self-hosted, aws ]
+    runs-on: [self-hosted, aws]
     timeout-minutes: 720
+    needs: [switch_branch_job]  # Depend on switch_branch_job to complete
     environment: ${{ github.event.inputs.environment }}
     env:
       USER: ""
@@ -82,50 +90,53 @@ jobs:
       CUR_DATABASE: ${{ github.event.inputs.target_db }}
       CUR_SCHEMA: ${{ github.event.inputs.target_schema }}
       HIST_CUT_OFF_DT: ${{ github.event.inputs.hist_cut_off_dt }}
-      TABLE: ${{ github.event.inputs.table }}
+      TABLES: ${{ steps.list_of_values_step.outputs.tables }}  # Use the tables from the list_of_values_job
     steps:
-    - uses: actions/checkout@v1
-    - name: Installing SnowSQL
-      run: |
-        curl -o /tmp/snowsql-1.2.24-linux_x86_64.bash -0 https://sfc-repo.snowflakecomputing.com/snowsql/bootstrap/1.2/linux_x86_64/snowsql-1.2.24-linux_x86_64.bash
-        SNOWSQL_DEST=~/bin SNOWSQL_LOGIN_SHELL=~/.profile bash /tmp/snowsql-1.2.24-linux_x86_64.bash
-        echo "[connections.FIS_DEVELOPMENT]" >> ~/.snowsql/config
-        echo "accountname = $ACCOUNT" >> ~/.snowsql/config
-        echo "username = $USER" >> ~/.snowsql/config
-        echo "password = \"$PASSWORD\"" >> ~/.snowsql/config
-        echo "dbname = $DATABASE" >> ~/.snowsql/config
-        echo "schemaname = $SCHEMA" >> ~/.snowsql/config
-        echo "warehousename = $WAREHOUSE" >> ~/.snowsql/config
+      - uses: actions/checkout@v1
 
-        # Defining the tables to process
-        if [ "$TABLE" != "*" ]; then
-          echo "$TABLE" > $GITHUB_WORKSPACE/.github/workflows/sdm_tables_list_names.txt
-        fi
+      - name: Installing SnowSQL and Additional Steps
+        run: |
+          # Installing SnowSQL
+          curl -o /tmp/snowsql-1.2.24-linux_x86_64.bash -0 https://sfc-repo.snowflakecomputing.com/snowsql/bootstrap/1.2/linux_x86_64/snowsql-1.2.24-linux_x86_64.bash
+          SNOWSQL_DEST=~/bin SNOWSQL_LOGIN_SHELL=~/.profile bash /tmp/snowsql-1.2.24-linux_x86_64.bash
+          echo "[connections.FIS_DEVELOPMENT]" >> ~/.snowsql/config
+          echo "accountname = $ACCOUNT" >> ~/.snowsql/config
+          echo "username = $USER" >> ~/.snowsql/config
+          echo "password = \"$PASSWORD\"" >> ~/.snowsql/config
+          echo "dbname = $DATABASE" >> ~/.snowsql/config
+          echo "schemaname = $SCHEMA" >> ~/.snowsql/config
+          echo "warehousename = $WAREHOUSE" >> ~/.snowsql/config
 
-        declare -a ScriptsNames=$(cat $GITHUB_WORKSPACE/.github/workflows/sdm_tables_list_names.txt)
+          # Define tables list
+          if [ "$TABLES" != "*" ]; then
+            echo "$TABLES" > $GITHUB_WORKSPACE/.github/workflows/sdm_tables_list_names.txt
+          fi
 
-        #Hate doing this, THIS NEEDS TO BE PROPERLY HANDLE
-        cat SDM/RDS/History/HELPER_HIST.sql | sed "s/$CUR_SCHEMA;/g"  > helper_script.sql
-        cat helper_script.sql | head -n 10
-        ~/bin/snowsql -c DEVELOPMENT -o exit_on_error=true -o variable_substitution=true -D HIST_CUT_OFF_DT="$HIST_CUT_OFF_DT" -f helper_script.sql
-        STATUS_CODE=$?
-        if [ "$STATUS_CODE" -eq 1 ]; then
-          exit 1
-        fi
+          # Create helper_script.sql
+          cat $GITHUB_WORKSPACE/SDM/RDS/History/HELPER_HIST.sql | sed "s/$CUR_SCHEMA;/g"  > helper_script.sql
+          cat helper_script.sql | head -n 10
 
-        echo "FILES_PREPROCESSING"
-        #THIS SECTION WILL REPLACE THE HARDCODED SDM SCHEMA FOR ANY SCHEMA IS DEFINED IN THE CONTEXT.
-        for val in ${ScriptsNames["$@"]}; do
-          echo $val
-          FILE_PATH=$GITHUB_WORKSPACE/SDM/RDS/History/${val}_hist.sql
-          if [[ -f "$FILE_PATH" ]]; then
-            cat $FILE_PATH | sed "s/$CUR_SCHEMA;/g"  > $FILE_PATH.tmp
-            mv $FILE_PATH.tmp $FILE_PATH
-          else
-            echo "File does not exist $FILE_PATH"
+          # Run SnowSQL for helper_script.sql
+          ~/bin/snowsql -c DEVELOPMENT -o exit_on_error=true -o variable_substitution=true -D HIST_CUT_OFF_DT="$HIST_CUT_OFF_DT" -f helper_script.sql
+          STATUS_CODE=$?
+          if [ "$STATUS_CODE" -eq 1 ]; then
             exit 1
           fi
-        done
 
-        export PROJECT_HOME=$GITHUB_WORKSPACE
-        
+          # Files Preprocessing
+          declare -a ScriptsNames=$(cat $GITHUB_WORKSPACE/.github/workflows/sdm_tables_list_names.txt)
+          echo "FILES_PREPROCESSING"
+
+          for val in ${ScriptsNames[*]}; do
+            echo $val
+            FILE_PATH=$GITHUB_WORKSPACE/SDM/RDS/History/${val}_hist.sql
+            if [[ -f "$FILE_PATH" ]]; then
+              cat $FILE_PATH | sed "s/$CUR_SCHEMA;/g"  > $FILE_PATH.tmp
+              mv $FILE_PATH.tmp $FILE_PATH
+            else
+              echo "File does not exist $FILE_PATH"
+              exit 1
+            fi
+          done
+
+          export PROJECT_HOME=$GITHUB_WORKSPACE
