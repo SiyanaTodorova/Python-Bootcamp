@@ -22,7 +22,7 @@ on:
         default: "CUR"
       target_schema:
         type: string
-        description: "Schema"
+        description: "Schema (comma-separated, optional)"
         default: "SD"
       hist_cut_off_dt:
         type: string
@@ -86,11 +86,11 @@ jobs:
       PASSWORD: ${{ secrets.PASSWORD }}
       WAREHOUSE: ${{ secrets.WAREHOUSE }}
       DATABASE: "CUR "
-      SCHEMA: "SD"
-      CUR_DATABASE: ${{ github.event.inputs.target_db }}
-      CUR_SCHEMA: ${{ github.event.inputs.target_schema }}
+      CUR_SCHEMAS: "SD,OTHER_SCHEMA"  # Add additional CUR_SCHEMA values here
       HIST_CUT_OFF_DT: ${{ github.event.inputs.hist_cut_off_dt }}
       TABLES: ${{ steps.list_of_values_step.outputs.tables }}  # Use the tables from the list_of_values_job
+      TARGET_SCHEMAS: ${{ github.event.inputs.target_schema }}  # Use the target_schema input
+      
     steps:
       - uses: actions/checkout@v1
 
@@ -102,10 +102,8 @@ jobs:
           echo "[connections.FIS_DEVELOPMENT]" >> ~/.snowsql/config
           echo "accountname = $ACCOUNT" >> ~/.snowsql/config
           echo "username = $USER" >> ~/.snowsql/config
-          echo "password = \"$PASSWORD\"" >> ~/.snowsql/config
+          echo "password = \"$PASSWORD\"" >> ~/.snowsql.config
           echo "dbname = $DATABASE" >> ~/.snowsql/config
-          echo "schemaname = $SCHEMA" >> ~/.snowsql/config
-          echo "warehousename = $WAREHOUSE" >> ~/.snowsql/config
 
           # Define tables list
           if [ "$TABLES" != "*" ]; then
@@ -140,3 +138,4 @@ jobs:
           done
 
           export PROJECT_HOME=$GITHUB_WORKSPACE
+
