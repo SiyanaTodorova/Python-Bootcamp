@@ -8,6 +8,33 @@ on:
       branch_name:
         description: 'Enter the name of the branch to switch to'
         required: true
+      environment:
+        type: choice
+        options:
+        - development
+        - test
+      target_db:
+        type: string
+        description: "Database"
+        default: "CUR"
+      target_schema:
+        type: string
+        description: "Schema"
+        default: "SD"
+      table:
+        type: string
+        description: "Specific table (* for all)"
+        default: "*"
+      hist_cut_off_dt:
+        type: string
+        description: "History cut off date to be used as part as part of the initial load."
+        default: '2023-02-23 23:59:59.999'
+
+ 
+permissions:
+  contents: read
+  issues: read
+  checks: write
 
 jobs:
   list_of_values_job:
