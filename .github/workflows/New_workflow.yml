@@ -1,4 +1,4 @@
-name: My GitHub Action Workflow
+name: New Action Workflow
 on:
   workflow_dispatch:
     inputs:
