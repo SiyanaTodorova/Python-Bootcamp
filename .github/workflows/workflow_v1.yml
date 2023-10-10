@@ -28,14 +28,15 @@ jobs:
 
   switch_branch_job:
     runs-on: ubuntu-latest
+    env: 
+      BRANCH_NAME : ${{ github.event.inputs.branch_name }} 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Switch to the specified branch
-        run: |
-          branch_name="${{ inputs.branch_name }}"
-          git checkout "$branch_name"
-          echo "Switched to branch: $branch_name"
+    - uses: actions/checkout@v1
+      with:  
+        ref: ${{ github.event.inputs.branch_name }}
+    - name: Check
+      run: |
+          #echo -e 'Running on default: ${{ steps.branch-name.outputs.current_branch }}   
+          echo -e 'var name: ${{ github.event.inputs.branch_name }}'
       
       # You can add further steps to make changes to the branch as needed.
