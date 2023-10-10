@@ -24,5 +24,4 @@ jobs:
           #echo -e 'Running on default: ${{ steps.branch-name.outputs.current_branch }}   
           echo -e 'var name: ${{ github.event.inputs.branch_name }}'
 
-          for file in ${{ steps.changed-files.outputs.all_changed_files}}; do
-          echo "$file"
+          for file in ${{ steps.changed-files.outputs.all_changed_files}};
