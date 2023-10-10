@@ -15,6 +15,8 @@ on:
 jobs:
   task:
     runs-on: ubuntu-latest
+    env: 
+      BRANCH_NAME : ${{ github.event.inputs.branch_name }} 
     steps:
     - uses: actions/checkout@v1
       with:  
@@ -23,5 +25,3 @@ jobs:
       run: |
           #echo -e 'Running on default: ${{ steps.branch-name.outputs.current_branch }}   
           echo -e 'var name: ${{ github.event.inputs.branch_name }}'
-
-          for file in ${{ steps.changed-files.outputs.all_changed_files}};
