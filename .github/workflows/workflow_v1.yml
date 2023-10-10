@@ -1,0 +1,36 @@
+name: My GitHub Action Workflow
+on:
+  workflow_dispatch:
+    inputs:
+      list_of_values:
+        description: 'Enter a list of values (comma-separated)'
+        required: true
+      branch_name:
+        description: 'Enter the name of the branch to switch to'
+        required: true
+
+jobs:
+  list_of_values_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Use the list of values input
+        run: |
+          list_of_values="${{ inputs.list_of_values }}"
+          echo "List of values provided: $list_of_values"
+
+  switch_branch_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Switch to the specified branch
+        run: |
+          branch_name="${{ inputs.branch_name }}"
+          git checkout "$branch_name"
+          echo "Switched to branch: $branch_name"
+      
+      # You can add further steps to make changes to the branch as needed.
