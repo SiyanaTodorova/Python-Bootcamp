@@ -45,7 +45,7 @@ jobs:
         id: list_of_values_step
         run: |
           list_of_tables="${{ inputs.list_of_values }}"
-          FS=',' read -ra tables <<< "$list_of_tables"
+          IFS=',' read -ra tables <<< "$list_of_tables"
           echo "::set-output name=tables::${tables[*]}"  # Set an output to pass tables as an artifact
 
   switch_branch_job:
